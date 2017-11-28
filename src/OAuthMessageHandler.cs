@@ -13,6 +13,7 @@ namespace OAuth
         private readonly string _secret;
         private readonly string _authToken;
         private readonly string _authTokenSecret;
+        private Dictionary<string, string> _parameters = null;
 
         public OAuthMessageHandler(string apiKey, string secret, string authToken, string authTokenSecret)
         {
@@ -24,7 +25,7 @@ namespace OAuth
             this.InnerHandler = new HttpClientHandler();
         }
 
-        private string GetAuthenticationHeaderForRequest(Uri requestUri, HttpMethod method)
+        private string GetAuthenticationHeaderForRequest(Uri requestUri, HttpMethod method, Dictionary<String, String> postvars)
         {
             List<KeyValuePair<string, string>> parameters = new List<KeyValuePair<string, string>>()
             {
@@ -35,6 +36,16 @@ namespace OAuth
                 new KeyValuePair<string,string>(Constants.oauth_version, Constants.oauth_version_1a),
                 new KeyValuePair<string,string>(Constants.oauth_token, _authToken),
             };
+            
+            if(postvars != null)
+            {
+                foreach (var item in postvars)
+                {
+                    parameters.Add(new KeyValuePair<string, string>(item.Key, item.Value));
+                }
+                // reset parameters for future calls
+                _parameters = null;
+            }
 
             string baseUri = requestUri.OriginalString;
 
@@ -52,7 +63,8 @@ namespace OAuth
                     {
                         value = values[1];
                     }
-                    parameters.Add(new KeyValuePair<string, string>(name, value));
+
+                    parameters.Add(new KeyValuePair<string, string>(Uri.UnescapeDataString(name), Uri.UnescapeDataString(value)));
                 }
             }
 
@@ -75,11 +87,16 @@ namespace OAuth
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
         {
-            string header = GetAuthenticationHeaderForRequest(request.RequestUri, request.Method);
+            string header = GetAuthenticationHeaderForRequest(request.RequestUri, request.Method, _parameters);
 
             request.Headers.Authorization = new AuthenticationHeaderValue(Constants.OAuthAuthenticationHeader, header);
 
             return base.SendAsync(request, cancellationToken);
+        }
+
+        public void SetPostKeyValsForOauthSig(Dictionary<string, string> parameters)  
+        {
+            _parameters = parameters;
         }
     }
 }
